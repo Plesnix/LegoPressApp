@@ -5,8 +5,8 @@ from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QBrush, QPen, QColor, QPainter
 
 # Global Settings
-GRID_SIZE = 20
-BASEPLATE_SIZE = 400 # 20x20 studs if grid is 20
+GRID_SIZE = 32
+BASEPLATE_SIZE = GRID_SIZE * GRID_SIZE # 20x20 studs if grid is 20 
 
 class LegoPiece(QGraphicsRectItem):
     def __init__(self, x, y, width_units, height_units, color):
