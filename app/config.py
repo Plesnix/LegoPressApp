@@ -1,0 +1,5 @@
+# app/config.py
+GRID_SIZE = 20
+BASEPLATE_SIZE = 600  # 30x30 studs
+BG_COLOR = "#323232"
+GRID_LINE_COLOR = "#484848"
