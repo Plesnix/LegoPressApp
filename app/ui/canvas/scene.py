@@ -124,3 +124,14 @@ class LegoView(QGraphicsView):
             event.accept()
         else:
             super().mouseReleaseEvent(event)
+            
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_R:
+            for item in self.scene().selectedItems():
+                if hasattr(item, 'rotate_90'):
+                    item.rotate_90()
+        elif event.key() in [Qt.Key.Key_Delete, Qt.Key.Key_Backspace]:
+            for item in self.scene().selectedItems():
+                self.scene().removeItem(item)
+        super().keyPressEvent(event)
