@@ -144,12 +144,12 @@ class Sidebar(QWidget):
         # Format: (Width, Height, Color, Display Name, ID/Shape)
         LIBRARY_DATA = [
             # RECTANGULAR TILES
-            (1, 1, "#A0A0A0", "1x1 Tile (3070b)", "3070b"),
-            (1, 2, "#A0A0A0", "1x2 Tile (3069b)", "3069b"),
-            (1, 3, "#A0A0A0", "1x3 Tile (63864)", "63864"),
-            (1, 4, "#A0A0A0", "1x4 Tile (2431)", "2431"),
-            (1, 6, "#A0A0A0", "1x6 Tile (6636)", "6636"),
-            (2, 2, "#A0A0A0", "2x2 Tile (3068b)", "3068b"),
+            (1, 1, "#A0A0A0", "1x1 Tile (3070b)", "Rectangle"),
+            (1, 2, "#A0A0A0", "1x2 Tile (3069b)", "Rectangle"),
+            (1, 3, "#A0A0A0", "1x3 Tile (63864)", "Rectangle"),
+            (1, 4, "#A0A0A0", "1x4 Tile (2431)", "Rectangle"),
+            (1, 6, "#A0A0A0", "1x6 Tile (6636)", "Rectangle"),
+            (2, 2, "#A0A0A0", "2x2 Tile (3068b)", "Rectangle"),
             (2, 1, "#A0A0A0", "1x2 Wedge Tile (5092)", "5092"),
 
             # ROUND TILES
@@ -170,7 +170,7 @@ class Sidebar(QWidget):
             (2, 2, "#E63946", "2x2 Triangle (35787)", "triangle"),
 
             # SPECIAL SHAPES
-            (1, 1, "#EC34CE", "1x1 Heart (39739)", "39739"),
+            (1, 1, "#EC34CE", "1x1 Heart (39739)", "heart"),
             
         ]
 
