@@ -48,7 +48,10 @@ class LegoView(QGraphicsView):
         if event.modifiers() & Qt.ControlModifier:
             if event.key() == Qt.Key.Key_C: self.copy_selection()
             elif event.key() == Qt.Key.Key_V: self.start_paste_mode()
-            elif event.key() == Qt.Key.Key_Z: self.undo_stack_logic() # Placeholder if needed
+ 
+        if event.key() == Qt.Key.Key_T:
+            self.rotate_selection_90()
+
         
         if event.key() == Qt.Key.Key_R:
             for item in self.scene().selectedItems():
@@ -59,6 +62,80 @@ class LegoView(QGraphicsView):
         elif event.key() == Qt.Key.Key_Escape:
             self.cancel_paste_mode()
         super().keyPressEvent(event)
+
+    def rotate_selection_90(self):
+        """Rotates all selected items around their common center in grid coordinates."""
+        selected_items = [i for i in self.scene().selectedItems() if isinstance(i, LegoPiece)]
+        if not selected_items:
+            return
+
+        grid = config.GRID_SIZE
+
+        # 1. Find the bounding box of the whole group in GRID UNITS (Studs)
+        min_gx, min_gy = float('inf'), float('inf')
+        max_gx, max_gy = float('-inf'), float('-inf')
+
+        item_data = [] # Temporary storage to keep track of current states
+
+        for item in selected_items:
+            # Current position in studs
+            gx, gy = item.pos().x() / grid, item.pos().y() / grid
+            
+            # Current width/height in studs based on current orientation
+            rect = item.boundingRect()
+            gw, gh = rect.width() / grid, rect.height() / grid
+            
+            min_gx = min(min_gx, gx)
+            min_gy = min(min_gy, gy)
+            max_gx = max(max_gx, gx + gw)
+            max_gy = max(max_gy, gy + gh)
+            
+            item_data.append({
+                'item': item,
+                'gx': gx,
+                'gy': gy,
+                'gw': gw,
+                'gh': gh
+            })
+
+        # 2. Calculate the Group Pivot Point in Studs
+        pgx = (min_gx + max_gx) / 2.0
+        pgy = (min_gy + max_gy) / 2.0
+
+        # 3. Process each item
+        for data in item_data:
+            item = data['item']
+            
+            # Calculate current center in studs
+            cgx = data['gx'] + data['gw'] / 2.0
+            cgy = data['gy'] + data['gh'] / 2.0
+
+            # 4. Rotate the Center Point 90 degrees around the Group Pivot
+            # Formula for rotating point (x,y) around pivot (px,py):
+            # new_x = px - (y - py)
+            # new_y = py + (x - px)
+            new_cgx = pgx - (cgy - pgy)
+            new_cgy = pgy + (cgx - pgx)
+
+            # 5. Spin the piece itself (swaps its width and height)
+            item.rotate_90()
+
+            # 6. Get the NEW dimensions in studs
+            new_rect = item.boundingRect()
+            new_gw = new_rect.width() / grid
+            new_gh = new_rect.height() / grid
+
+            # 7. Calculate new Top-Left position in studs
+            # (TopLeft = New Center - New Half Size)
+            new_gx = new_cgx - new_gw / 2.0
+            new_gy = new_cgy - new_gh / 2.0
+
+            # 8. Snap to grid and set pixel position
+            # Rounding to the nearest stud (int) removes all "disjointed" drift
+            final_x = round(new_gx) * grid
+            final_y = round(new_gy) * grid
+            
+            item.setPos(QPointF(final_x, final_y))
 
     def copy_selection(self):
         selected = [i for i in self.scene().selectedItems() if isinstance(i, LegoPiece)]

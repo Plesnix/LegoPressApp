@@ -137,10 +137,10 @@ class LegoPiece(QGraphicsPathItem):
         self.setPath(path)
 
     def rotate_90(self):
+        """Update internal angle and refresh the visual geometry."""
         self.current_angle = (self.current_angle + 90) % 360
+        self.prepareGeometryChange() # Important: lets Qt know the bounding box moved
         self.refresh_shape()
-        self.prepareGeometryChange() # Tell Qt the bounding box might have flipped
-        self.setPos(self.pos()) 
 
     def mouseDoubleClickEvent(self, event):
         self.rotate_90()
