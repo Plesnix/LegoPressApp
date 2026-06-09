@@ -58,29 +58,41 @@ class LegoView(QGraphicsView):
     def dragMoveEvent(self, event):
         event.acceptProposedAction()
 
+
     def dropEvent(self, event):
         data_string = event.mimeData().text()
+        # DEBUG PRINT:
+        print(f"DEBUG: Dropped data received: {data_string}")
+        
         try:
-            w_u, h_u, color = data_string.split(",")
-            w_units, h_units = int(w_u), int(h_u)
+            parts = data_string.split(",")
             
-            # Map mouse to scene
+            # Defensive check: if we have fewer than 3 parts, something is wrong
+            if len(parts) < 3:
+                print("Error: Incomplete data received.")
+                return
+
+            w_u = int(parts[0])
+            h_u = int(parts[1])
+            color = parts[2]
+            
+            # SAFE CHECK: Use parts[3] if it exists, otherwise default to "rect"
+            shape = parts[3] if len(parts) > 3 else "rect"
+            
             raw_pos = self.mapToScene(event.pos())
-            
-            # Snap to grid
             snap_x = round(raw_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
             snap_y = round(raw_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
             
             # Clamp to boundaries
-            snap_x = max(0, min(snap_x, config.BASEPLATE_SIZE - (w_units * config.GRID_SIZE)))
-            snap_y = max(0, min(snap_y, config.BASEPLATE_SIZE - (h_units * config.GRID_SIZE)))
+            snap_x = max(0, min(snap_x, config.BASEPLATE_SIZE - (w_u * config.GRID_SIZE)))
+            snap_y = max(0, min(snap_y, config.BASEPLATE_SIZE - (h_u * config.GRID_SIZE)))
             
-            new_piece = LegoPiece(snap_x, snap_y, w_units, h_units, color)
+            new_piece = LegoPiece(snap_x, snap_y, w_u, h_u, color, shape)
             self.scene().addItem(new_piece)
             
             event.acceptProposedAction()
         except Exception as e:
-            print(f"Drop error: {e}")
+            print(f"CRITICAL ERROR in dropEvent: {e}")
             event.ignore()
 
     # --- NAVIGATION LOGIC (RIGHT-CLICK PAN & ZOOM) ---
