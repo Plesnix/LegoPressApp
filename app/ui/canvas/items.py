@@ -5,109 +5,98 @@ from PySide6.QtGui import QBrush, QPen, QColor, QPainterPath, QTransform
 from app import config
 
 def get_lego_path(w_units, h_units, shape_type):
+    """Universal function to get the geometry of any Lego piece"""
     path = QPainterPath()
     grid = config.GRID_SIZE
     w = w_units * grid
     h = h_units * grid
 
     # --- ROUND SHAPES (98138, 14769, 79393) ---
-    if shape_type in ["round"]:
+    if shape_type in ["round", "98138", "14769", "79393"]:
         path.addEllipse(0, 0, w, h)
 
     # --- HALF ROUND (24246) ---
-    elif shape_type in ["24246"]:
-        # 1x1 Tile with one rounded end
+    elif shape_type == "24246":
         path.moveTo(0, h)
         path.lineTo(w, h)
         path.lineTo(w, h/2)
-        # Semi-circle top: bounding box is the full 1x1 area
         path.arcTo(0, 0, w, h, 0, 180)
         path.closeSubpath()
 
-    # --- MACARONI / QUARTER ROUND STRIPS  ---
-    elif shape_type in ["macaroni"]:
-        # These are strips 1-stud wide. 
-        # For 27925 (2x2), Outer Radius = 2, Inner Radius = 1.
-        # For 27507 (4x4), Outer Radius = 4, Inner Radius = 3.
-        
-        # We place the 'center' of the circle at the bottom-right corner (w, h)
+    # --- MACARONI / QUARTER ROUND STRIPS (Generic) ---
+    elif shape_type in ["macaroni", "25269", "27925", "27507"]:
         outer_r = w
-        inner_r = w - grid # The strip is always 1 stud wide
-        
-        # Outer Arc (from left to top)
+        inner_r = w - grid 
         path.arcMoveTo(0, 0, outer_r*2, outer_r*2, 180)
         path.arcTo(0, 0, outer_r*2, outer_r*2, 180, -90)
-        
-        # Line to inner arc
         path.lineTo(w, h - inner_r) 
-        
-        # Inner Arc (back to left)
         if inner_r > 0:
             path.arcTo(w - inner_r, h - inner_r, inner_r*2, inner_r*2, 90, 90)
         else:
-            # For 1x1 Quarter Tile (25269), inner radius is 0, so it's a pie slice
             path.lineTo(w, h)
-            
         path.closeSubpath()
 
     # --- CORNER L-SHAPE (14719) ---
-    elif shape_type == "L":
-        # A 2x2 L-shape tile
+    elif shape_type in ["L", "14719"]:
         path.moveTo(0, 0)
         path.lineTo(w, 0)
-        path.lineTo(w, grid) # 1 stud down
-        path.lineTo(grid, grid) # 1 stud left
-        path.lineTo(grid, h) # all the way down
+        path.lineTo(w, grid)
+        path.lineTo(grid, grid)
+        path.lineTo(grid, h)
         path.lineTo(0, h)
         path.closeSubpath()
 
     # --- TRIANGLE (35787) ---
-    elif shape_type == "triangle":
-        # 2x2 Right Triangle
+    elif shape_type in ["triangle", "35787"]:
         path.moveTo(0, 0)
         path.lineTo(w, h)
         path.lineTo(0, h)
         path.closeSubpath()
 
-          # --- 1x2 HALF CIRCLE (1748) ---
+    # --- 1x2 HALF CIRCLE (1748) ---
     elif shape_type == "1748":
-        # Imagine a 2x2 circle cut in half. 
-        # Footprint is 2 studs wide (w) by 1 stud deep (h).
         path.moveTo(0, h)
         path.lineTo(w, h)
-        # We draw an arc using a 2x2 bounding box (0, 0, w, w)
-        # Starting at 0 degrees (middle-right) to 180 degrees (middle-left)
-        path.arcTo(0, 0, w, w, 0, 180) 
+        path.arcTo(0, -h, w, h*2, 0, 180) 
         path.closeSubpath()
 
     # --- 2x2 HALF ROUND (5520) ---
     elif shape_type == "5520":
-        # Square 2x2 base with one side rounded (like 24246)
         path.moveTo(0, h)
         path.lineTo(w, h)
         path.lineTo(w, h/2)
-        # Semi-circle on the top half
         path.arcTo(0, 0, w, h, 0, 180)
         path.closeSubpath()
 
-    # --- 1x1 HEART (39739) ---
+     # --- 1x1 HEART (39739) ---
     elif shape_type == "39739":
-        # Stylized heart shape within 1x1
-        # Drawing two arcs and a V-shape bottom
-        path.moveTo(w/2, h) # Bottom tip
-        path.lineTo(0, h/2) # Left side
-        path.arcTo(0, 0, w/2, h/2, 180, -180) # Left lobe
-        path.arcTo(w/2, 0, w/2, h/2, 180, -180) # Right lobe
-        path.lineTo(w/2, h) # Back to bottom
+        # Reduced margin from 10% to 2% to make it fill the cell
+        margin = grid * 0.02
+        sw = w - (margin * 2)
+        sh = h - (margin * 2)
+
+        # Start at the sharp bottom tip
+        path.moveTo(sw/2, sh * 0.98) 
+        
+        # Left Side:
+        # We pushed the control points further out (-sw * 0.35) 
+        # to create a much fuller "bulge"
+        path.cubicTo(-sw * 0.35, sh * 0.4, 
+                     sw * 0.25, -sh * 0.3, 
+                     sw/2, sh * 0.25)
+        
+        # Right Side:
+        path.cubicTo(sw * 0.75, -sh * 0.3, 
+                     sw * 1.35, sh * 0.4, 
+                     sw/2, sh * 0.98)
         path.closeSubpath()
 
     # --- 1x2 WEDGE / SLOPE (5092) ---
     elif shape_type == "5092":
-        # 1x1 Square + 1x1 Triangle
         path.moveTo(0, 0)
-        path.lineTo(w/2, 0) # Top edge of square
-        path.lineTo(w, h)   # Diagonal down to bottom right
-        path.lineTo(0, h)   # Bottom edge
+        path.lineTo(w/2, 0)
+        path.lineTo(w, h)
+        path.lineTo(0, h)
         path.closeSubpath()
 
     # --- DEFAULT RECTANGLE ---
@@ -134,13 +123,27 @@ class LegoPiece(QGraphicsPathItem):
                       QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
 
     def refresh_shape(self):
-        # Use the shared function
+        """Redraws the path, rotates it, and centers it in the grid cell."""
         path = get_lego_path(self.w_units, self.h_units, self.shape_type)
+        
         tr = QTransform()
         tr.rotate(self.current_angle)
         path = tr.map(path)
-        offset = path.boundingRect().topLeft()
-        path.translate(-offset)
+
+        # Determine target footprint
+        if self.current_angle % 180 != 0:
+            target_w, target_h = self.h_units * config.GRID_SIZE, self.w_units * config.GRID_SIZE
+        else:
+            target_w, target_h = self.w_units * config.GRID_SIZE, self.h_units * config.GRID_SIZE
+
+        # Center logic
+        rect = path.boundingRect()
+        path.translate(-rect.topLeft()) # Reset to 0,0
+        
+        pad_x = (target_w - rect.width()) / 2
+        pad_y = (target_h - rect.height()) / 2
+        path.translate(pad_x, pad_y)
+
         self.setPath(path)
 
     def rotate_90(self):
