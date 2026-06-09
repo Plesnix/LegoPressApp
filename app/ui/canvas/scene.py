@@ -216,3 +216,36 @@ class LegoView(QGraphicsView):
     def wheelEvent(self, event):
         factor = 1.15 if event.angleDelta().y() > 0 else 0.85
         self.scale(factor, factor)
+
+class LegoPrintView(QGraphicsView):
+    def __init__(self, scene):
+        super().__init__(scene)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setBackgroundBrush(QBrush(QColor("#000000"))) # Pure black void
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # --- HORIZONTAL MIRRORING ---
+        # scale(-1, 1) flips the X-axis (Left <-> Right)
+        # scale(1, -1) would have flipped the Y-axis (Top <-> Bottom)
+        self.scale(-1, 1)
+        
+        # 2. LOCK THE VIEW
+        # We don't want to move pieces or drag things in the Print View
+        self.setInteractive(False) 
+        
+        # Set the view to look ONLY at the baseplate
+        self.setSceneRect(0, 0, config.BASEPLATE_SIZE, config.BASEPLATE_SIZE)
+
+    def drawForeground(self, painter, rect):
+        """This acts as a 'Mask' to hide pieces outside the baseplate."""
+        # We draw a giant black frame around the baseplate area 
+        # so any pieces in the 'void' are hidden in this tab.
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0)) # Match the background color
+        
+        s = config.BASEPLATE_SIZE
+        # Draw 4 large rectangles around the 0,0 to s,s area
+        painter.drawRect(-2000, -2000, 5000, 2000) # Top
+        painter.drawRect(-2000, s, 5000, 2000)     # Bottom
+        painter.drawRect(-2000, 0, 2000, s)        # Left
+        painter.drawRect(s, 0, 2000, s)            # Right
