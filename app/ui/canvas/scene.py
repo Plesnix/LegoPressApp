@@ -2,8 +2,8 @@
 import copy
 from PySide6.QtWidgets import (QGraphicsScene, QGraphicsView, QGraphicsRectItem, 
                              QGraphicsLineItem, QGraphicsItemGroup, QGraphicsItem)
-from PySide6.QtCore import Qt, QPoint, QPointF
-from PySide6.QtGui import QPainter, QBrush, QColor, QPen, QCursor
+from PySide6.QtCore import Qt, QPoint, QPointF, QRectF
+from PySide6.QtGui import QPainter, QBrush, QColor, QPen, QCursor, QFont
 from app import config
 from app.ui.canvas.items import LegoPiece
 
@@ -22,20 +22,15 @@ class LegoScene(QGraphicsScene):
         # 2. Create the Grid Lines
         line_pen = QPen(QColor(config.GRID_LINE_COLOR), 1)
         line_pen.setCosmetic(True)
-        
         for x in range(0, config.BASEPLATE_SIZE + 1, config.GRID_SIZE):
             line = QGraphicsLineItem(x, 0, x, config.BASEPLATE_SIZE)
-            line.setPen(line_pen)
-            line.setZValue(-99)
-            self.addItem(line)
-            
+            line.setPen(line_pen); line.setZValue(-99); self.addItem(line)
         for y in range(0, config.BASEPLATE_SIZE + 1, config.GRID_SIZE):
             line = QGraphicsLineItem(0, y, config.BASEPLATE_SIZE, y)
-            line.setPen(line_pen)
-            line.setZValue(-99)
-            self.addItem(line)
+            line.setPen(line_pen); line.setZValue(-99); self.addItem(line)
 
 class LegoView(QGraphicsView):
+    """ The Standard Builder View """
     def __init__(self, scene):
         super().__init__(scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -45,79 +40,52 @@ class LegoView(QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         
-        # Clipboard and Ghosting state
         self.clipboard = []  
         self.ghost_group = None 
         self._last_pan_pos = QPoint()
 
-    # --- UNIFIED KEYBOARD LOGIC ---
     def keyPressEvent(self, event):
-        # 1. Copy (Ctrl+C)
-        if event.key() == Qt.Key.Key_C and event.modifiers() & Qt.ControlModifier:
-            self.copy_selection()
+        if event.modifiers() & Qt.ControlModifier:
+            if event.key() == Qt.Key.Key_C: self.copy_selection()
+            elif event.key() == Qt.Key.Key_V: self.start_paste_mode()
+            elif event.key() == Qt.Key.Key_Z: self.undo_stack_logic() # Placeholder if needed
         
-        # 2. Paste (Ctrl+V)
-        elif event.key() == Qt.Key.Key_V and event.modifiers() & Qt.ControlModifier:
-            self.start_paste_mode()
-
-        # 3. Rotate (R)
-        elif event.key() == Qt.Key.Key_R:
+        if event.key() == Qt.Key.Key_R:
             for item in self.scene().selectedItems():
-                if hasattr(item, 'rotate_90'):
-                    item.rotate_90()
-
-        # 4. Delete (Delete/Backspace)
+                if hasattr(item, 'rotate_90'): item.rotate_90()
         elif event.key() in [Qt.Key.Key_Delete, Qt.Key.Key_Backspace]:
             for item in self.scene().selectedItems():
-                self.scene().removeItem(item)
-
-        # 5. Cancel Paste (Escape)
+                if isinstance(item, LegoPiece): self.scene().removeItem(item)
         elif event.key() == Qt.Key.Key_Escape:
             self.cancel_paste_mode()
-
         super().keyPressEvent(event)
 
     def copy_selection(self):
-        # We only want to copy actual Lego pieces
         selected = [i for i in self.scene().selectedItems() if isinstance(i, LegoPiece)]
         if not selected: return
-
         self.clipboard = []
-        # Find the reference point (top-left of the whole group)
         min_x = min(item.pos().x() for item in selected)
         min_y = min(item.pos().y() for item in selected)
-
         for item in selected:
             self.clipboard.append({
-                'w': item.w_units,
-                'h': item.h_units,
-                'color': item.color,
-                'shape': item.shape_type,
-                'angle': item.current_angle,
-                'rel_x': item.pos().x() - min_x, # Offset from the top-left
-                'rel_y': item.pos().y() - min_y
+                'w': item.w_units, 'h': item.h_units, 'color': item.color,
+                'shape': item.shape_type, 'angle': item.current_angle,
+                'rel_x': item.pos().x() - min_x, 'rel_y': item.pos().y() - min_y
             })
-        print(f"Copied {len(self.clipboard)} items.")
 
     def start_paste_mode(self):
         if not self.clipboard: return
         self.cancel_paste_mode() 
-
         self.ghost_group = QGraphicsItemGroup()
         self.scene().addItem(self.ghost_group)
-        self.ghost_group.setZValue(1000) 
-
         for data in self.clipboard:
             ghost = LegoPiece(data['rel_x'], data['rel_y'], data['w'], data['h'], data['color'], data['shape'])
             ghost.current_angle = data['angle']
             ghost.refresh_shape()
-            ghost.setOpacity(0.4) 
-            # Disable interaction for the ghosts
+            ghost.setOpacity(0.5) 
             ghost.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
             ghost.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
             self.ghost_group.addToGroup(ghost)
-        
-        # Position the ghost immediately at the mouse
         self.update_ghost_pos(self.mapFromGlobal(QCursor.pos()))
 
     def cancel_paste_mode(self):
@@ -127,125 +95,159 @@ class LegoView(QGraphicsView):
 
     def update_ghost_pos(self, mouse_pos):
         if not self.ghost_group: return
-        scene_pos = self.mapToScene(self.mapFromGlobal(QCursor.pos()))
-        
-        # Snap the whole group to the grid
+        scene_pos = self.mapToScene(self.mapFromFrame(mouse_pos) if hasattr(self, 'mapFromFrame') else self.mapFromGlobal(QCursor.pos()))
+        # If standard map fails, just use global cursor relative to viewport
+        view_pos = self.mapFromGlobal(QCursor.pos())
+        scene_pos = self.mapToScene(view_pos)
         snap_x = round(scene_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
         snap_y = round(scene_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
         self.ghost_group.setPos(snap_x, snap_y)
 
-    # --- UNIFIED MOUSE LOGIC ---
     def mousePressEvent(self, event):
-        # 1. Right Click: Pan OR Cancel Paste
         if event.button() == Qt.MouseButton.RightButton:
-            if self.ghost_group:
-                self.cancel_paste_mode()
+            if self.ghost_group: self.cancel_paste_mode()
             else:
                 self._last_pan_pos = event.pos()
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
-            event.accept()
-
-          # 2. Left Click: "Stamp" Paste OR Standard Selection
-        elif event.button() == Qt.MouseButton.LeftButton:
-            if self.ghost_group:
-                # COMMIT PASTE
-                base_x = self.ghost_group.pos().x()
-                base_y = self.ghost_group.pos().y()
-                
-                # --- NEW: Clear selection so we can select the new pieces ---
-                self.scene().clearSelection()
-
-                for data in self.clipboard:
-                    new_piece = LegoPiece(base_x + data['rel_x'], base_y + data['rel_y'], 
-                                         data['w'], data['h'], data['color'], data['shape'])
-                    new_piece.current_angle = data['angle']
-                    new_piece.refresh_shape()
-                    self.scene().addItem(new_piece)
-                    
-                    # --- NEW: Select the newly created piece ---
-                    new_piece.setSelected(True)
-                
-                self.cancel_paste_mode()
-                event.accept()
-            else:
-                super().mousePressEvent(event)
+        elif event.button() == Qt.MouseButton.LeftButton and self.ghost_group:
+            self.scene().clearSelection()
+            base_x, base_y = self.ghost_group.pos().x(), self.ghost_group.pos().y()
+            for data in self.clipboard:
+                new_p = LegoPiece(base_x + data['rel_x'], base_y + data['rel_y'], data['w'], data['h'], data['color'], data['shape'])
+                new_p.current_angle = data['angle']; new_p.refresh_shape(); self.scene().addItem(new_p); new_p.setSelected(True)
+            self.cancel_paste_mode()
+        else: super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self.ghost_group:
-            self.update_ghost_pos(event.pos())
-        
+        if self.ghost_group: self.update_ghost_pos(event.pos())
         if event.buttons() & Qt.MouseButton.RightButton:
             delta = self._last_pan_pos - event.pos()
             self._last_pan_pos = event.pos()
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + delta.x())
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() + delta.y())
-            event.accept()
-        else:
-            super().mouseMoveEvent(event)
+        else: super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            self.unsetCursor()
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
-
-    # --- DRAG AND DROP ---
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasText(): event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        data_string = event.mimeData().text()
-        try:
-            parts = data_string.split(",")
-            w_u, h_u, color = int(parts[0]), int(parts[1]), parts[2]
-            shape = parts[3] if len(parts) > 3 else "rect"
-            raw_pos = self.mapToScene(event.pos())
-            snap_x = round(raw_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
-            snap_y = round(raw_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
-            new_piece = LegoPiece(snap_x, snap_y, w_u, h_u, color, shape)
-            self.scene().addItem(new_piece)
-            event.acceptProposedAction()
-        except Exception as e:
-            print(f"Drop error: {e}")
-            event.ignore()
+        if event.button() == Qt.MouseButton.RightButton: self.unsetCursor()
+        super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
         factor = 1.15 if event.angleDelta().y() > 0 else 0.85
         self.scale(factor, factor)
 
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText(): event.acceptProposedAction()
+    def dragMoveEvent(self, event): event.acceptProposedAction()
+    def dropEvent(self, event):
+        try:
+            parts = event.mimeData().text().split(",")
+            w, h, col, shp = int(parts[0]), int(parts[1]), parts[2], parts[3] if len(parts)>3 else "rect"
+            raw = self.mapToScene(event.pos())
+            sx = round(raw.x() / config.GRID_SIZE) * config.GRID_SIZE
+            sy = round(raw.y() / config.GRID_SIZE) * config.GRID_SIZE
+            self.scene().addItem(LegoPiece(sx, sy, w, h, col, shp))
+            event.acceptProposedAction()
+        except: event.ignore()
+
 class LegoPrintView(QGraphicsView):
+    """ The Mirrored Print View with Smart Guides """
     def __init__(self, scene):
         super().__init__(scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setBackgroundBrush(QBrush(QColor("#000000"))) # Pure black void
+        self.setBackgroundBrush(QBrush(QColor("#000000")))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # --- HORIZONTAL MIRRORING ---
-        # scale(-1, 1) flips the X-axis (Left <-> Right)
-        # scale(1, -1) would have flipped the Y-axis (Top <-> Bottom)
-        self.scale(-1, 1)
+        # 1. Mirror horizontally (X-axis)
+        self.scale(-1, 1) 
         
-        # 2. LOCK THE VIEW
-        # We don't want to move pieces or drag things in the Print View
-        self.setInteractive(False) 
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setMouseTracking(True)
+        self._last_pan_pos = QPoint()
+        self.mouse_scene_pos = QPointF(0, 0)
+
+    def wheelEvent(self, event):
+        factor = 1.15 if event.angleDelta().y() > 0 else 0.85
+        self.scale(factor, factor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self._last_pan_pos = event.pos()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        self.mouse_scene_pos = self.mapToScene(event.pos())
         
-        # Set the view to look ONLY at the baseplate
-        self.setSceneRect(0, 0, config.BASEPLATE_SIZE, config.BASEPLATE_SIZE)
+        if event.buttons() & Qt.MouseButton.RightButton:
+            delta = event.pos() - self._last_pan_pos
+            self._last_pan_pos = event.pos()
+            
+            # --- THE PANNING FIX ---
+            # Standard: value - delta
+            # Mirrored: Because scale is -1, horizontal delta must be ADDED 
+            # to make the 'camera' move with the mouse.
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            
+        self.viewport().update() 
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.unsetCursor()
+        super().mouseReleaseEvent(event)
 
     def drawForeground(self, painter, rect):
-        """This acts as a 'Mask' to hide pieces outside the baseplate."""
-        # We draw a giant black frame around the baseplate area 
-        # so any pieces in the 'void' are hidden in this tab.
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0)) # Match the background color
-        
+        mx, my = self.mouse_scene_pos.x(), self.mouse_scene_pos.y()
         s = config.BASEPLATE_SIZE
-        # Draw 4 large rectangles around the 0,0 to s,s area
-        painter.drawRect(-2000, -2000, 5000, 2000) # Top
-        painter.drawRect(-2000, s, 5000, 2000)     # Bottom
-        painter.drawRect(-2000, 0, 2000, s)        # Left
-        painter.drawRect(s, 0, 2000, s)            # Right
+        grid = config.GRID_SIZE
+
+        # 1. Mask (Black background outside baseplate)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 255))
+        painter.drawRect(-2000, -2000, 5000, 2000) 
+        painter.drawRect(-2000, s, 5000, 2000)     
+        painter.drawRect(-2000, 0, 2000, s)        
+        painter.drawRect(s, 0, 2000, s)            
+
+        # 2. Measurement Tool (Only inside plate)
+        if 0 <= mx <= s and 0 <= my <= s:
+            # Change Pen to Black for the Crosshairs
+            guide_pen = QPen(QColor(0, 0, 0, 200), 1, Qt.PenStyle.DashLine)
+            guide_pen.setCosmetic(True)
+            painter.setPen(guide_pen)
+
+            painter.drawLine(QPointF(0, my), QPointF(s, my))
+            painter.drawLine(QPointF(mx, 0), QPointF(mx, s))
+
+            # Measurement Logic
+            all_items = [i for i in self.scene().items() if isinstance(i, LegoPiece) and i.isVisible()]
+            dl, dr, du, dd = mx, s - mx, my, s - my
+
+            for item in all_items:
+                ir = item.sceneBoundingRect()
+                if ir.top() <= my <= ir.bottom():
+                    if ir.right() <= mx: dl = min(dl, mx - ir.right())
+                    elif ir.left() >= mx: dr = min(dr, ir.left() - mx)
+                if ir.left() <= mx <= ir.right():
+                    if ir.bottom() <= my: du = min(du, my - ir.bottom())
+                    elif ir.top() >= my: dd = min(dd, ir.top() - my)
+
+            # 3. Draw Black Labels
+            painter.save()
+            # Un-mirror the coordinate system for text so it isn't backward
+            painter.scale(-1, 1) 
+            painter.setPen(QColor(0, 0, 0)) # Set text to Black
+            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            
+            def d_txt(v, x, y):
+                std = round(v / grid)
+                if std > 0:
+                    # Because we scaled -1, we must pass negative X to get it back on screen
+                    painter.drawText(int(-x), int(y), f"{std}")
+
+            d_txt(dl, mx - dl/2, my - 5)
+            d_txt(dr, mx + dr/2, my - 5)
+            d_txt(du, mx + 5, my - du/2)
+            d_txt(dd, mx + 5, my + dd/2)
+            painter.restore()
