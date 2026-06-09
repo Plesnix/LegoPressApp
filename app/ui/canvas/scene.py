@@ -145,18 +145,26 @@ class LegoView(QGraphicsView):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
 
-        # 2. Left Click: "Stamp" Paste OR Standard Selection
+          # 2. Left Click: "Stamp" Paste OR Standard Selection
         elif event.button() == Qt.MouseButton.LeftButton:
             if self.ghost_group:
                 # COMMIT PASTE
                 base_x = self.ghost_group.pos().x()
                 base_y = self.ghost_group.pos().y()
+                
+                # --- NEW: Clear selection so we can select the new pieces ---
+                self.scene().clearSelection()
+
                 for data in self.clipboard:
                     new_piece = LegoPiece(base_x + data['rel_x'], base_y + data['rel_y'], 
                                          data['w'], data['h'], data['color'], data['shape'])
                     new_piece.current_angle = data['angle']
                     new_piece.refresh_shape()
                     self.scene().addItem(new_piece)
+                    
+                    # --- NEW: Select the newly created piece ---
+                    new_piece.setSelected(True)
+                
                 self.cancel_paste_mode()
                 event.accept()
             else:
