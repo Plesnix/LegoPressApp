@@ -51,7 +51,7 @@ def get_lego_path(w_units, h_units, shape_type):
         path.closeSubpath()
 
     # --- CORNER L-SHAPE (14719) ---
-    elif shape_type == "14719":
+    elif shape_type == "L":
         # A 2x2 L-shape tile
         path.moveTo(0, 0)
         path.lineTo(w, 0)
@@ -62,11 +62,52 @@ def get_lego_path(w_units, h_units, shape_type):
         path.closeSubpath()
 
     # --- TRIANGLE (35787) ---
-    elif shape_type == "35787":
+    elif shape_type == "triangle":
         # 2x2 Right Triangle
         path.moveTo(0, 0)
         path.lineTo(w, h)
         path.lineTo(0, h)
+        path.closeSubpath()
+
+          # --- 1x2 HALF CIRCLE (1748) ---
+    elif shape_type == "1748":
+        # Imagine a 2x2 circle cut in half. 
+        # Footprint is 2 studs wide (w) by 1 stud deep (h).
+        path.moveTo(0, h)
+        path.lineTo(w, h)
+        # We draw an arc using a 2x2 bounding box (0, 0, w, w)
+        # Starting at 0 degrees (middle-right) to 180 degrees (middle-left)
+        path.arcTo(0, 0, w, w, 0, 180) 
+        path.closeSubpath()
+
+    # --- 2x2 HALF ROUND (5520) ---
+    elif shape_type == "5520":
+        # Square 2x2 base with one side rounded (like 24246)
+        path.moveTo(0, h)
+        path.lineTo(w, h)
+        path.lineTo(w, h/2)
+        # Semi-circle on the top half
+        path.arcTo(0, 0, w, h, 0, 180)
+        path.closeSubpath()
+
+    # --- 1x1 HEART (39739) ---
+    elif shape_type == "39739":
+        # Stylized heart shape within 1x1
+        # Drawing two arcs and a V-shape bottom
+        path.moveTo(w/2, h) # Bottom tip
+        path.lineTo(0, h/2) # Left side
+        path.arcTo(0, 0, w/2, h/2, 180, -180) # Left lobe
+        path.arcTo(w/2, 0, w/2, h/2, 180, -180) # Right lobe
+        path.lineTo(w/2, h) # Back to bottom
+        path.closeSubpath()
+
+    # --- 1x2 WEDGE / SLOPE (5092) ---
+    elif shape_type == "5092":
+        # 1x1 Square + 1x1 Triangle
+        path.moveTo(0, 0)
+        path.lineTo(w/2, 0) # Top edge of square
+        path.lineTo(w, h)   # Diagonal down to bottom right
+        path.lineTo(0, h)   # Bottom edge
         path.closeSubpath()
 
     # --- DEFAULT RECTANGLE ---

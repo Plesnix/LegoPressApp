@@ -150,21 +150,28 @@ class Sidebar(QWidget):
             (1, 4, "#A0A0A0", "1x4 Tile (2431)", "2431"),
             (1, 6, "#A0A0A0", "1x6 Tile (6636)", "6636"),
             (2, 2, "#A0A0A0", "2x2 Tile (3068b)", "3068b"),
-            
+            (2, 1, "#A0A0A0", "1x2 Wedge Tile (5092)", "5092"),
+
             # ROUND TILES
-            (1, 1, "#FFD700", "1x1 Round (98138)", "round"),
-            (2, 2, "#FFD700", "2x2 Round (14769)", "round"),
-            (3, 3, "#FFD700", "3x3 Round (79393)", "round"),
-            (4, 4, "#FFD700", "4x4 Round (GDS-21071)", "round"),
+            (1, 1, "#FFD700", "1x1 Circle (98138)", "round"),
+            (2, 2, "#FFD700", "2x2 Circle (14769)", "round"),
+            (3, 3, "#FFD700", "3x3 Circle (79393)", "round"),
+            (4, 4, "#FFD700", "4x4 Circle (GDS-21071)", "round"),
+            (2, 1, "#FFD700", "1x2 Half Circle (1748)", "1748"),
             
             # CURVED / SPECIAL TILES
             (1, 1, "#4FB0C6", "1x1 Half Round (24246)", "24246"),
+            (2, 2, "#4FB0C6", "2x2 Half Round (5520)", "5520"),
             (1, 1, "#4FB0C6", "1x1 Quarter (25269)", "macaroni"),
             (2, 2, "#4FB0C6", "2x2 Macaroni (27925)", "macaroni"),
             (3, 3, "#4FB0C6", "3x3 Macaroni (79393)", "macaroni"),
             (4, 4, "#4FB0C6", "4x4 Macaroni (27507)", "macaroni"),
-            (2, 2, "#E63946", "2x2 Corner (14719)", "14719"),
-            (2, 2, "#E63946", "2x2 Triangle (35787)", "35787"),
+            (2, 2, "#E63946", "2x2 Corner (14719)", "L"),
+            (2, 2, "#E63946", "2x2 Triangle (35787)", "triangle"),
+
+            # SPECIAL SHAPES
+            (1, 1, "#EC34CE", "1x1 Heart (39739)", "39739"),
+            
         ]
 
         # Create a scroll area in case the list gets long
