@@ -8,7 +8,7 @@ from app.ui.canvas.items import LegoPiece
 class LegoScene(QGraphicsScene):
     def __init__(self):
         super().__init__()
-        # Set a large workspace
+        # Large workspace area
         self.setSceneRect(-1000, -1000, 3000, 3000)
         
         # 1. Create the Physical Baseplate
@@ -18,7 +18,7 @@ class LegoScene(QGraphicsScene):
         self.plate.setZValue(-100)
         self.addItem(self.plate)
 
-        # 2. Create the Grid Lines
+        # 2. Create the Grid Lines as actual items
         line_pen = QPen(QColor(config.GRID_LINE_COLOR), 1)
         line_pen.setCosmetic(True)
         
@@ -41,14 +41,16 @@ class LegoView(QGraphicsView):
         self.setBackgroundBrush(QBrush(QColor(config.VOID_COLOR)))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # ENABLE DRAG AND DROP
+        # Drag and Drop
         self.setAcceptDrops(True)
         
+        # Interaction Modes
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        
         self._last_pan_pos = QPoint()
 
-    # --- DRAG AND DROP LOGIC ---
+    # --- DRAG AND DROP LOGIC (WITH SNAPPING) ---
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
             event.acceptProposedAction()
@@ -59,22 +61,29 @@ class LegoView(QGraphicsView):
     def dropEvent(self, event):
         data_string = event.mimeData().text()
         try:
-            # We expect "width_units,height_units,color"
             w_u, h_u, color = data_string.split(",")
+            w_units, h_units = int(w_u), int(h_u)
             
-            # Map the mouse drop position to the Scene coordinates
-            scene_pos = self.mapToScene(event.pos())
+            # Map mouse to scene
+            raw_pos = self.mapToScene(event.pos())
             
-            # Create the piece (It will automatically snap to grid via its own logic)
-            new_piece = LegoPiece(scene_pos.x(), scene_pos.y(), int(w_u), int(h_u), color)
+            # Snap to grid
+            snap_x = round(raw_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
+            snap_y = round(raw_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
+            
+            # Clamp to boundaries
+            snap_x = max(0, min(snap_x, config.BASEPLATE_SIZE - (w_units * config.GRID_SIZE)))
+            snap_y = max(0, min(snap_y, config.BASEPLATE_SIZE - (h_units * config.GRID_SIZE)))
+            
+            new_piece = LegoPiece(snap_x, snap_y, w_units, h_units, color)
             self.scene().addItem(new_piece)
             
             event.acceptProposedAction()
         except Exception as e:
-            print(f"Drop failed: {e}")
+            print(f"Drop error: {e}")
             event.ignore()
 
-    # --- NAVIGATION LOGIC ---
+    # --- NAVIGATION LOGIC (RIGHT-CLICK PAN & ZOOM) ---
     def wheelEvent(self, event):
         factor = 1.15 if event.angleDelta().y() > 0 else 0.85
         self.scale(factor, factor)
@@ -83,6 +92,7 @@ class LegoView(QGraphicsView):
         if event.button() == Qt.MouseButton.RightButton:
             self._last_pan_pos = event.pos()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
         else:
             super().mousePressEvent(event)
 
@@ -92,10 +102,13 @@ class LegoView(QGraphicsView):
             self._last_pan_pos = event.pos()
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + delta.x())
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() + delta.y())
+            event.accept()
         else:
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
             self.unsetCursor()
-        super().mouseReleaseEvent(event)
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
