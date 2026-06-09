@@ -24,11 +24,12 @@ class LegoPiece(QGraphicsRectItem):
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
             new_pos = value 
+            
             # Snap to grid
             x = round(new_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
             y = round(new_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
             
-            # Boundary Clamping
+            # Boundary Clamping (using the actual piece dimensions)
             rect = self.rect()
             x = max(0, min(x, config.BASEPLATE_SIZE - rect.width()))
             y = max(0, min(y, config.BASEPLATE_SIZE - rect.height()))
