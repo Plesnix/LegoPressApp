@@ -131,26 +131,55 @@ class LibraryItemRow(QFrame):
 class Sidebar(QWidget):
     def __init__(self):
         super().__init__()
-        self.setFixedWidth(250)
+        self.setFixedWidth(260)
         self.setStyleSheet("background-color: #252525; border-right: 1px solid #444;")
         self.main_layout = QVBoxLayout(self)
-        
-        # One shared popup for the whole sidebar
         self.preview_popup = ShapePreviewPopup()
 
-        title = QLabel("CONTROLS & LIBRARY")
-        title.setStyleSheet("font-weight: bold; margin-bottom: 10px; color: #AAAAAA;")
+        title = QLabel("PIECE LIBRARY")
+        title.setStyleSheet("font-weight: bold; color: #AAAAAA; margin-bottom: 5px;")
         self.main_layout.addWidget(title)
-        
-        self.add_library_item(1, 1, "#e63946", "1x1 Stud (Red)", "rect")
-        self.add_library_item(2, 4, "#2196F3", "2x4 Brick (Blue)", "rect")
-        self.add_library_item(1, 1, "#FFD700", "1x1 Round Stud", "round")
-        self.add_library_item(1, 1, "#A0A0A0", "1x1 Half-Round", "24246")
-        self.add_library_item(2, 2, "#008080", "2x2 Macaroni", "27925")
-        
-        self.main_layout.addStretch()
 
-    def add_library_item(self, w, h, color, name, shape_type="rect"):
-        # Pass the preview_popup to every row
-        item_row = LibraryItemRow(w, h, color, name, shape_type, self.preview_popup)
-        self.main_layout.addWidget(item_row)
+        # YOUR PHYSICAL INVENTORY
+        # Format: (Width, Height, Color, Display Name, ID/Shape)
+        LIBRARY_DATA = [
+            # RECTANGULAR TILES
+            (1, 1, "#A0A0A0", "1x1 Tile (3070b)", "3070b"),
+            (1, 2, "#A0A0A0", "1x2 Tile (3069b)", "3069b"),
+            (1, 3, "#A0A0A0", "1x3 Tile (63864)", "63864"),
+            (1, 4, "#A0A0A0", "1x4 Tile (2431)", "2431"),
+            (1, 6, "#A0A0A0", "1x6 Tile (6636)", "6636"),
+            (2, 2, "#A0A0A0", "2x2 Tile (3068b)", "3068b"),
+            
+            # ROUND TILES
+            (1, 1, "#FFD700", "1x1 Round (98138)", "round"),
+            (2, 2, "#FFD700", "2x2 Round (14769)", "round"),
+            (3, 3, "#FFD700", "3x3 Round (79393)", "round"),
+            (4, 4, "#FFD700", "4x4 Round (GDS-21071)", "round"),
+            
+            # CURVED / SPECIAL TILES
+            (1, 1, "#4FB0C6", "1x1 Half Round (24246)", "24246"),
+            (1, 1, "#4FB0C6", "1x1 Quarter (25269)", "macaroni"),
+            (2, 2, "#4FB0C6", "2x2 Macaroni (27925)", "macaroni"),
+            (3, 3, "#4FB0C6", "3x3 Macaroni (79393)", "macaroni"),
+            (4, 4, "#4FB0C6", "4x4 Macaroni (27507)", "macaroni"),
+            (2, 2, "#E63946", "2x2 Corner (14719)", "14719"),
+            (2, 2, "#E63946", "2x2 Triangle (35787)", "35787"),
+        ]
+
+        # Create a scroll area in case the list gets long
+        from PySide6.QtWidgets import QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background-color: transparent;")
+        
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        
+        for w, h, col, name, sid in LIBRARY_DATA:
+            item = LibraryItemRow(w, h, col, name, sid, self.preview_popup)
+            container_layout.addWidget(item)
+            
+        container_layout.addStretch()
+        scroll.setWidget(container)
+        self.main_layout.addWidget(scroll)
