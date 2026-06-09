@@ -1,14 +1,15 @@
 # app/ui/canvas/scene.py
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsView, QGraphicsRectItem, QGraphicsLineItem
-from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QPainter, QBrush, QColor, QPen
+import copy
+from PySide6.QtWidgets import (QGraphicsScene, QGraphicsView, QGraphicsRectItem, 
+                             QGraphicsLineItem, QGraphicsItemGroup, QGraphicsItem)
+from PySide6.QtCore import Qt, QPoint, QPointF
+from PySide6.QtGui import QPainter, QBrush, QColor, QPen, QCursor
 from app import config
 from app.ui.canvas.items import LegoPiece
 
 class LegoScene(QGraphicsScene):
     def __init__(self):
         super().__init__()
-        # Large workspace area
         self.setSceneRect(-1000, -1000, 3000, 3000)
         
         # 1. Create the Physical Baseplate
@@ -18,7 +19,7 @@ class LegoScene(QGraphicsScene):
         self.plate.setZValue(-100)
         self.addItem(self.plate)
 
-        # 2. Create the Grid Lines as actual items
+        # 2. Create the Grid Lines
         line_pen = QPen(QColor(config.GRID_LINE_COLOR), 1)
         line_pen.setCosmetic(True)
         
@@ -40,75 +41,131 @@ class LegoView(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setBackgroundBrush(QBrush(QColor(config.VOID_COLOR)))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Drag and Drop
         self.setAcceptDrops(True)
-        
-        # Interaction Modes
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         
+        # Clipboard and Ghosting state
+        self.clipboard = []  
+        self.ghost_group = None 
         self._last_pan_pos = QPoint()
 
-    # --- DRAG AND DROP LOGIC (WITH SNAPPING) ---
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        event.acceptProposedAction()
-
-
-    def dropEvent(self, event):
-        data_string = event.mimeData().text()
-        # DEBUG PRINT:
-        print(f"DEBUG: Dropped data received: {data_string}")
+    # --- UNIFIED KEYBOARD LOGIC ---
+    def keyPressEvent(self, event):
+        # 1. Copy (Ctrl+C)
+        if event.key() == Qt.Key.Key_C and event.modifiers() & Qt.ControlModifier:
+            self.copy_selection()
         
-        try:
-            parts = data_string.split(",")
-            
-            # Defensive check: if we have fewer than 3 parts, something is wrong
-            if len(parts) < 3:
-                print("Error: Incomplete data received.")
-                return
+        # 2. Paste (Ctrl+V)
+        elif event.key() == Qt.Key.Key_V and event.modifiers() & Qt.ControlModifier:
+            self.start_paste_mode()
 
-            w_u = int(parts[0])
-            h_u = int(parts[1])
-            color = parts[2]
-            
-            # SAFE CHECK: Use parts[3] if it exists, otherwise default to "rect"
-            shape = parts[3] if len(parts) > 3 else "rect"
-            
-            raw_pos = self.mapToScene(event.pos())
-            snap_x = round(raw_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
-            snap_y = round(raw_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
-            
-            # Clamp to boundaries
-            snap_x = max(0, min(snap_x, config.BASEPLATE_SIZE - (w_u * config.GRID_SIZE)))
-            snap_y = max(0, min(snap_y, config.BASEPLATE_SIZE - (h_u * config.GRID_SIZE)))
-            
-            new_piece = LegoPiece(snap_x, snap_y, w_u, h_u, color, shape)
-            self.scene().addItem(new_piece)
-            
-            event.acceptProposedAction()
-        except Exception as e:
-            print(f"CRITICAL ERROR in dropEvent: {e}")
-            event.ignore()
+        # 3. Rotate (R)
+        elif event.key() == Qt.Key.Key_R:
+            for item in self.scene().selectedItems():
+                if hasattr(item, 'rotate_90'):
+                    item.rotate_90()
 
-    # --- NAVIGATION LOGIC (RIGHT-CLICK PAN & ZOOM) ---
-    def wheelEvent(self, event):
-        factor = 1.15 if event.angleDelta().y() > 0 else 0.85
-        self.scale(factor, factor)
+        # 4. Delete (Delete/Backspace)
+        elif event.key() in [Qt.Key.Key_Delete, Qt.Key.Key_Backspace]:
+            for item in self.scene().selectedItems():
+                self.scene().removeItem(item)
 
+        # 5. Cancel Paste (Escape)
+        elif event.key() == Qt.Key.Key_Escape:
+            self.cancel_paste_mode()
+
+        super().keyPressEvent(event)
+
+    def copy_selection(self):
+        # We only want to copy actual Lego pieces
+        selected = [i for i in self.scene().selectedItems() if isinstance(i, LegoPiece)]
+        if not selected: return
+
+        self.clipboard = []
+        # Find the reference point (top-left of the whole group)
+        min_x = min(item.pos().x() for item in selected)
+        min_y = min(item.pos().y() for item in selected)
+
+        for item in selected:
+            self.clipboard.append({
+                'w': item.w_units,
+                'h': item.h_units,
+                'color': item.color,
+                'shape': item.shape_type,
+                'angle': item.current_angle,
+                'rel_x': item.pos().x() - min_x, # Offset from the top-left
+                'rel_y': item.pos().y() - min_y
+            })
+        print(f"Copied {len(self.clipboard)} items.")
+
+    def start_paste_mode(self):
+        if not self.clipboard: return
+        self.cancel_paste_mode() 
+
+        self.ghost_group = QGraphicsItemGroup()
+        self.scene().addItem(self.ghost_group)
+        self.ghost_group.setZValue(1000) 
+
+        for data in self.clipboard:
+            ghost = LegoPiece(data['rel_x'], data['rel_y'], data['w'], data['h'], data['color'], data['shape'])
+            ghost.current_angle = data['angle']
+            ghost.refresh_shape()
+            ghost.setOpacity(0.4) 
+            # Disable interaction for the ghosts
+            ghost.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+            ghost.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self.ghost_group.addToGroup(ghost)
+        
+        # Position the ghost immediately at the mouse
+        self.update_ghost_pos(self.mapFromGlobal(QCursor.pos()))
+
+    def cancel_paste_mode(self):
+        if self.ghost_group:
+            self.scene().removeItem(self.ghost_group)
+            self.ghost_group = None
+
+    def update_ghost_pos(self, mouse_pos):
+        if not self.ghost_group: return
+        scene_pos = self.mapToScene(self.mapFromGlobal(QCursor.pos()))
+        
+        # Snap the whole group to the grid
+        snap_x = round(scene_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
+        snap_y = round(scene_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
+        self.ghost_group.setPos(snap_x, snap_y)
+
+    # --- UNIFIED MOUSE LOGIC ---
     def mousePressEvent(self, event):
+        # 1. Right Click: Pan OR Cancel Paste
         if event.button() == Qt.MouseButton.RightButton:
-            self._last_pan_pos = event.pos()
-            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            if self.ghost_group:
+                self.cancel_paste_mode()
+            else:
+                self._last_pan_pos = event.pos()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
-        else:
-            super().mousePressEvent(event)
+
+        # 2. Left Click: "Stamp" Paste OR Standard Selection
+        elif event.button() == Qt.MouseButton.LeftButton:
+            if self.ghost_group:
+                # COMMIT PASTE
+                base_x = self.ghost_group.pos().x()
+                base_y = self.ghost_group.pos().y()
+                for data in self.clipboard:
+                    new_piece = LegoPiece(base_x + data['rel_x'], base_y + data['rel_y'], 
+                                         data['w'], data['h'], data['color'], data['shape'])
+                    new_piece.current_angle = data['angle']
+                    new_piece.refresh_shape()
+                    self.scene().addItem(new_piece)
+                self.cancel_paste_mode()
+                event.accept()
+            else:
+                super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self.ghost_group:
+            self.update_ghost_pos(event.pos())
+        
         if event.buttons() & Qt.MouseButton.RightButton:
             delta = self._last_pan_pos - event.pos()
             self._last_pan_pos = event.pos()
@@ -124,14 +181,30 @@ class LegoView(QGraphicsView):
             event.accept()
         else:
             super().mouseReleaseEvent(event)
-            
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_R:
-            for item in self.scene().selectedItems():
-                if hasattr(item, 'rotate_90'):
-                    item.rotate_90()
-        elif event.key() in [Qt.Key.Key_Delete, Qt.Key.Key_Backspace]:
-            for item in self.scene().selectedItems():
-                self.scene().removeItem(item)
-        super().keyPressEvent(event)
+    # --- DRAG AND DROP ---
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText(): event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        data_string = event.mimeData().text()
+        try:
+            parts = data_string.split(",")
+            w_u, h_u, color = int(parts[0]), int(parts[1]), parts[2]
+            shape = parts[3] if len(parts) > 3 else "rect"
+            raw_pos = self.mapToScene(event.pos())
+            snap_x = round(raw_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
+            snap_y = round(raw_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
+            new_piece = LegoPiece(snap_x, snap_y, w_u, h_u, color, shape)
+            self.scene().addItem(new_piece)
+            event.acceptProposedAction()
+        except Exception as e:
+            print(f"Drop error: {e}")
+            event.ignore()
+
+    def wheelEvent(self, event):
+        factor = 1.15 if event.angleDelta().y() > 0 else 0.85
+        self.scale(factor, factor)
