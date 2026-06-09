@@ -48,7 +48,8 @@ class Sidebar(QWidget):
         self.add_library_item(2, 4, "#2196F3", "2x4 Brick (Blue)", "rect")
         self.add_library_item(1, 1, "#A0A0A0", "1x1 Half-Round (24246)", "24246")
         self.add_library_item(2, 2, "#008080", "2x2 Macaroni (27925)", "27925")
-        
+        self.add_library_item(1, 1, "#FFD700", "1x1 Round Stud (Gold)", "round")
+
         self.main_layout.addStretch()
 
     def add_library_item(self, w, h, color, name, shape_type="rect"):

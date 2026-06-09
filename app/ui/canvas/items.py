@@ -40,6 +40,10 @@ class LegoPiece(QGraphicsPathItem):
             path.arcTo(0, 0, w, h, 0, 180) 
             path.closeSubpath()
 
+        elif self.shape_type == "round": # 1x1 Round Stud
+            # Draw a circle that fits perfectly in the grid square
+            path.addEllipse(0, 0, w, h)    
+
         else: # Default Rectangle
             path.addRect(0, 0, w, h)
             
