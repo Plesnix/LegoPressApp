@@ -68,8 +68,5 @@ class LegoPiece(QGraphicsPathItem):
             new_pos = value 
             x = round(new_pos.x() / config.GRID_SIZE) * config.GRID_SIZE
             y = round(new_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
-            rect = self.path().boundingRect()
-            x = max(0, min(x, config.BASEPLATE_SIZE - rect.width()))
-            y = max(0, min(y, config.BASEPLATE_SIZE - rect.height()))
             return QPointF(x, y)
         return super().itemChange(change, value)
