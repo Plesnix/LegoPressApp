@@ -98,8 +98,10 @@ class LegoPiece(QGraphicsPathItem):
         self.w_units = w_units
         self.h_units = h_units
         self.color = color
+        self.original_color = color
         self.shape_type = shape_type
         self.current_angle = 0 
+        
 
         self.refresh_shape()
         self.setPos(x, y)
@@ -108,6 +110,7 @@ class LegoPiece(QGraphicsPathItem):
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | 
                       QGraphicsItem.GraphicsItemFlag.ItemIsSelectable |
                       QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+
 
     def boundingRect(self):
         """Forces the selection box (dotted line) to be exactly the grid footprint."""
@@ -153,3 +156,8 @@ class LegoPiece(QGraphicsPathItem):
             y = round(new_pos.y() / config.GRID_SIZE) * config.GRID_SIZE
             return QPointF(x, y)
         return super().itemChange(change, value)
+    
+    def set_color_override(self, override_color=None):
+        """If an override color is provided, use it. Otherwise, revert to the original color."""
+        target_color = override_color if override_color else self.original_color
+        self.setBrush(QBrush(QColor(target_color)))
