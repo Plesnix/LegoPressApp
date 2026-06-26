@@ -1,12 +1,17 @@
 # app/config.py
 GRID_SIZE = 20
-BASEPLATE_SIZE = 32 * GRID_SIZE
+BOARD_SIZE_STUDS = 100
+BOARD_SIZE_PX = BOARD_SIZE_STUDS * GRID_SIZE
+
+# Default Print Area (The bold outline)
+DEFAULT_PRINT_W = 32
+DEFAULT_PRINT_H = 32
+
 PLATE_COLOR = "#FFFFFF"
 GRID_LINE_COLOR = "#F50000"
 VOID_COLOR = "#121212"
 
-# YOUR PHYSICAL INVENTORY (Width, Height, Color, Name, ID/Shape)
-# Sorted by Area (Largest first) for the Smart Packer logic
+# PHYSICAL INVENTORY
 LIBRARY_DATA = [
     (4, 4, "#FFD700", "4x4 Circle", "round"),
     (4, 4, "#4FB0C6", "4x4 Macaroni", "macaroni"),

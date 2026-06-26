@@ -1,4 +1,5 @@
 # app/ui/canvas/scene.py
+import copy
 from PySide6.QtWidgets import (QGraphicsScene, QGraphicsView, QGraphicsRectItem, 
                              QGraphicsLineItem, QGraphicsItemGroup, QGraphicsItem, QGraphicsPixmapItem)
 from PySide6.QtCore import Qt, QPoint, QPointF, QRectF
@@ -9,24 +10,47 @@ from app.ui.canvas.items import LegoPiece
 class LegoScene(QGraphicsScene):
     def __init__(self, board_size=None, show_plate=True):
         super().__init__()
-        self.s = board_size if board_size else config.BASEPLATE_SIZE
-        self.setSceneRect(-2000, -2000, 5000, 5000)
-        if show_plate:
-            self.plate = QGraphicsRectItem(0, 0, self.s, self.s)
-            self.plate.setBrush(QBrush(QColor(config.PLATE_COLOR)))
-            self.plate.setPen(QPen(Qt.GlobalColor.black, 2))
-            self.plate.setZValue(-100); self.addItem(self.plate)
-        lp = QPen(QColor(config.GRID_LINE_COLOR), 1); lp.setCosmetic(True)
+        self.s = board_size if board_size else config.BOARD_SIZE_PX
+        self.setSceneRect(-1000, -1000, self.s + 2000, self.s + 2000)
+        
+        self.plate = QGraphicsRectItem(0, 0, self.s, self.s)
+        self.plate.setBrush(QBrush(QColor(config.PLATE_COLOR)))
+        self.plate.setPen(QPen(Qt.GlobalColor.black, 1))
+        self.plate.setZValue(-100)
+        self.addItem(self.plate)
+        if not show_plate: self.plate.setOpacity(0)
+
+        self.grid_group = QGraphicsItemGroup()
+        self.addItem(self.grid_group)
+        self.grid_group.setZValue(-90)
+        self.grid_color = QColor(config.GRID_LINE_COLOR)
+        self.refresh_grid()
+
+        self.boundary = QGraphicsRectItem()
+        bp = QPen(Qt.GlobalColor.black, 4); bp.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+        self.boundary.setPen(bp); self.boundary.setZValue(-80); self.addItem(self.boundary)
+        self.update_boundary(config.DEFAULT_PRINT_W, config.DEFAULT_PRINT_H)
+
+    def refresh_grid(self):
+        for item in self.grid_group.childItems():
+            self.grid_group.removeFromGroup(item)
+            self.removeItem(item)
+        lp = QPen(self.grid_color, 1); lp.setCosmetic(True)
         for x in range(0, int(self.s) + 1, config.GRID_SIZE):
-            line = QGraphicsLineItem(x, 0, x, self.s); line.setPen(lp); line.setZValue(-99); self.addItem(line)
+            line = QGraphicsLineItem(x, 0, x, self.s); line.setPen(lp); self.grid_group.addToGroup(line)
         for y in range(0, int(self.s) + 1, config.GRID_SIZE):
-            line = QGraphicsLineItem(0, y, self.s, y); line.setPen(lp); line.setZValue(-99); self.addItem(line)
+            line = QGraphicsLineItem(0, y, self.s, y); line.setPen(lp); self.grid_group.addToGroup(line)
+
+    def update_boundary(self, w_studs, h_studs):
+        ox = (config.BOARD_SIZE_STUDS - w_studs) / 2 * config.GRID_SIZE
+        oy = (config.BOARD_SIZE_STUDS - h_studs) / 2 * config.GRID_SIZE
+        self.boundary.setRect(ox, oy, w_studs * config.GRID_SIZE, h_studs * config.GRID_SIZE)
 
 class LegoView(QGraphicsView):
     def __init__(self, scene):
-        super().__init__(scene)
-        self.setRenderHint(QPainter.RenderHint.Antialiasing); self.setBackgroundBrush(QBrush(QColor(config.VOID_COLOR)))
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter); self.setAcceptDrops(True); self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        super().__init__(scene); self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setBackgroundBrush(QBrush(QColor(config.VOID_COLOR))); self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setAcceptDrops(True); self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.ghost_group = None; self._last_pan_pos = QPoint()
 
@@ -65,7 +89,7 @@ class LegoView(QGraphicsView):
         sel = [i for i in self.scene().selectedItems() if isinstance(i, LegoPiece)]
         if not sel: return
         self.window().shared_clipboard = []
-        min_x = min(i.pos().x() for i in sel); min_y = min(i.pos().y() for i in sel)
+        min_x = min(item.pos().x() for item in sel); min_y = min(item.pos().y() for item in sel)
         for i in sel:
             self.window().shared_clipboard.append({
                 'w': i.w_units, 'h': i.h_units, 'color': i.brush().color().name(),
@@ -147,7 +171,9 @@ class LegoPrintView(QGraphicsView):
         self.mouse_scene_pos = self.mapToScene(ev.pos())
         if ev.buttons() & Qt.MouseButton.RightButton:
             delta = ev.pos() - self._last_pan_pos; self._last_pan_pos = ev.pos()
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + delta.x()); self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            # FIXED: Speed halved (multiplied by 0.5) to keep 1:1 movement in mirrored view
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + int(delta.x() * 0.5))
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
         else: super().mouseMoveEvent(ev)
         self.viewport().update()
 
@@ -159,14 +185,16 @@ class LegoPrintView(QGraphicsView):
         f = 1.15 if ev.angleDelta().y() > 0 else 0.85; self.scale(f, f)
 
     def drawForeground(self, painter, rect):
-        mx, my = self.mouse_scene_pos.x(), self.mouse_scene_pos.y(); s = self.scene().plate.rect().width() if hasattr(self.scene(), 'plate') else 600; grid = config.GRID_SIZE
+        mx, my = self.mouse_scene_pos.x(), self.mouse_scene_pos.y()
+        br = self.scene().boundary.rect()
+        sw, sh, ox, oy = br.width(), br.height(), br.x(), br.y(); grid = config.GRID_SIZE
         painter.setPen(Qt.PenStyle.NoPen); painter.setBrush(QColor(0, 0, 0))
-        painter.drawRect(-2000, -2000, 5000, 2000); painter.drawRect(-2000, s, 5000, 2000); painter.drawRect(-2000, 0, 2000, s); painter.drawRect(s, 0, 2000, s)            
-        if 0 <= mx <= s and 0 <= my <= s:
+        painter.drawRect(-2000, -2000, 5000, oy + 2000); painter.drawRect(-2000, oy + sh, 5000, 2000); painter.drawRect(-2000, oy, ox + 2000, sh); painter.drawRect(ox + sw, oy, 2000, sh)            
+        if ox <= mx <= ox+sw and oy <= my <= oy+sh:
             painter.setPen(QPen(QColor(0,0,0,200), 1, Qt.PenStyle.DashLine))
-            painter.drawLine(QPointF(0, my), QPointF(s, my)); painter.drawLine(QPointF(mx, 0), QPointF(mx, s))
+            painter.drawLine(QPointF(ox, my), QPointF(ox+sw, my)); painter.drawLine(QPointF(mx, oy), QPointF(mx, oy+sh))
             items = [i for i in self.scene().items() if isinstance(i, LegoPiece) and i.isVisible()]
-            dl, dr, du, dd = mx, s - mx, my, s - my
+            dl, dr, du, dd = mx-ox, (ox+sw)-mx, my-oy, (oy+sh)-my
             for i in items:
                 ir = i.sceneBoundingRect()
                 if ir.top() <= my <= ir.bottom():
@@ -185,12 +213,31 @@ class LegoPrintView(QGraphicsView):
 class LegoConverterView(QGraphicsView):
     def __init__(self, scene):
         super().__init__(scene); self.setRenderHint(QPainter.RenderHint.Antialiasing); self.setBackgroundBrush(QBrush(QColor("#111")))
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter); self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter); self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.grid_color = QColor(255, 0, 0, 150)
+        self.grid_color = QColor(255, 0, 0, 150); self.show_overlay = True; self._last_pan_pos = QPoint()
+
+    def wheelEvent(self, ev):
+        f = 1.15 if ev.angleDelta().y() > 0 else 0.85; self.scale(f, f)
+
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.MouseButton.RightButton: self._last_pan_pos = ev.pos(); self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        else: super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        if ev.buttons() & Qt.MouseButton.RightButton:
+            delta = ev.pos() - self._last_pan_pos; self._last_pan_pos = ev.pos()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+        else: super().mouseMoveEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        if ev.button() == Qt.MouseButton.RightButton: self.unsetCursor()
+        super().mouseReleaseEvent(ev)
 
     def drawForeground(self, painter, rect):
-        grid = config.GRID_SIZE; res = 60; size = res * grid
+        if not self.show_overlay: return
+        grid, size = config.GRID_SIZE, 60 * config.GRID_SIZE
         pen = QPen(self.grid_color, 1); pen.setCosmetic(True); painter.setPen(pen)
         for x in range(0, size + 1, grid): painter.drawLine(x, 0, x, size)
         for y in range(0, size + 1, grid): painter.drawLine(0, y, size, y)
